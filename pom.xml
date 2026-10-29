@@ -6,7 +6,7 @@
 
   <groupId>edu.ntnu.bidata</groupId>
   <artifactId>activity-logger</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.1.0</version>
   <packaging>jar</packaging>
 
   <properties>
