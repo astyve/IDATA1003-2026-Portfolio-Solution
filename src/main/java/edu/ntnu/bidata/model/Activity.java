@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 
@@ -24,6 +25,10 @@ import java.util.Set;
  *   <li>{@code registeredAt} ({@link LocalDateTime}): the date and time the activity was
  *       registered. One type holds both date and time, which makes sorting by time and
  *       searching by date simple.</li>
+ *   <li>{@code type} ({@link ActivityType}): the kind of activity. An enum, since there is a
+ *       fixed set of types and the user picks one from a list.</li>
+ *   <li>{@code distanceKm} ({@code double}): the distance in kilometres. A {@code double},
+ *       since distances have decimals, e.g. 7.6 km.</li>
  *   <li>{@code sharedWithPersons} ({@link Set} of {@link Person}): the persons the activity
  *       is shared with. A set, since sharing with the same person twice has no meaning.</li>
  *   <li>{@code sharedWithGroups} ({@link Set} of {@link Group}): the groups the activity is
@@ -35,16 +40,17 @@ import java.util.Set;
  * otherwise <i>private</i>. This is derived from the two sets, so the two can never disagree.
  *
  * <p><b>Final and mutable fields:</b> {@code logger} and {@code registeredAt} are final,
- * since who logged an activity and when it was registered never change. {@code title} and
- * {@code description} can be changed with setters, so mistakes can be corrected. The two
- * share sets are final references, but their contents change when the activity is shared or
- * made private.
+ * since who logged an activity and when it was registered never change. {@code title},
+ * {@code description}, {@code type} and {@code distanceKm} can be changed with setters, so
+ * mistakes can be corrected. The two share sets are final references, but their contents
+ * change when the activity is shared, unshared or made private.
  *
  * <p><b>Invalid data:</b> the constructor and the methods validate their arguments and throw
  * an exception instead of storing dummy values, so an {@code Activity} object is always valid.
  * A {@code null} argument gives a {@link NullPointerException}; a blank text, a registration
- * time in the future or sharing with the activity's own logger gives an
- * {@link IllegalArgumentException}. Text values are stored trimmed.
+ * time in the future, a negative or non-finite distance, or sharing with the activity's own
+ * logger gives an {@link IllegalArgumentException}; stopping sharing with someone the activity
+ * is not shared with gives a {@link NoSuchElementException}. Text values are stored trimmed.
  */
 public class Activity {
 
@@ -57,6 +63,8 @@ public class Activity {
   private String title;
   private String description;
   private final LocalDateTime registeredAt;
+  private ActivityType type;
+  private double distanceKm;
   private final Set<Person> sharedWithPersons = new HashSet<>();
   private final Set<Group> sharedWithGroups = new HashSet<>();
 
@@ -67,23 +75,28 @@ public class Activity {
    * @param title the title of the activity, not blank
    * @param description the description of the activity, not blank
    * @param registeredAt the date and time the activity was registered, not in the future
-   * @throws NullPointerException if any argument is {@code null}
-   * @throws IllegalArgumentException if a text is blank or {@code registeredAt} is in the
-   *     future
+   * @param type the type of the activity
+   * @param distanceKm the distance in kilometres, zero or more
+   * @throws NullPointerException if any object argument is {@code null}
+   * @throws IllegalArgumentException if a text is blank, {@code registeredAt} is in the
+   *     future, or {@code distanceKm} is negative or not a finite number
    */
   public Activity(Person logger, String title, String description,
-      LocalDateTime registeredAt) {
+      LocalDateTime registeredAt, ActivityType type, double distanceKm) {
     Objects.requireNonNull(logger, "Logger cannot be null.");
     Objects.requireNonNull(title, "Title cannot be null.");
     Objects.requireNonNull(description, "Description cannot be null.");
     Objects.requireNonNull(registeredAt, "Registration time cannot be null.");
+    Objects.requireNonNull(type, "Activity type cannot be null.");
     this.title = requireNotBlank(title, "Title cannot be blank.");
     this.description = requireNotBlank(description, "Description cannot be blank.");
     if (registeredAt.isAfter(LocalDateTime.now())) {
       throw new IllegalArgumentException("Registration time cannot be in the future.");
     }
+    this.distanceKm = requireValidDistance(distanceKm);
     this.logger = logger;
     this.registeredAt = registeredAt;
+    this.type = type;
   }
 
   /**
@@ -147,6 +160,44 @@ public class Activity {
   }
 
   /**
+   * Returns the type of the activity.
+   *
+   * @return the activity type
+   */
+  public ActivityType getType() {
+    return type;
+  }
+
+  /**
+   * Changes the type of the activity.
+   *
+   * @param type the new activity type
+   * @throws NullPointerException if {@code type} is {@code null}
+   */
+  public void setType(ActivityType type) {
+    this.type = Objects.requireNonNull(type, "Activity type cannot be null.");
+  }
+
+  /**
+   * Returns the distance of the activity in kilometres.
+   *
+   * @return the distance in kilometres
+   */
+  public double getDistanceKm() {
+    return distanceKm;
+  }
+
+  /**
+   * Changes the distance of the activity.
+   *
+   * @param distanceKm the new distance in kilometres, zero or more
+   * @throws IllegalArgumentException if {@code distanceKm} is negative or not a finite number
+   */
+  public void setDistanceKm(double distanceKm) {
+    this.distanceKm = requireValidDistance(distanceKm);
+  }
+
+  /**
    * Shares the activity with a person. Sharing with the same person again has no effect.
    *
    * @param person the person to share with
@@ -171,6 +222,35 @@ public class Activity {
   public void shareWith(Group group) {
     Objects.requireNonNull(group, "Group cannot be null.");
     sharedWithGroups.add(group);
+  }
+
+  /**
+   * Stops sharing the activity directly with a person.
+   *
+   * @param person the person to stop sharing with
+   * @throws NullPointerException if {@code person} is {@code null}
+   * @throws NoSuchElementException if the activity is not shared directly with the person
+   */
+  public void unshareWith(Person person) {
+    Objects.requireNonNull(person, "Person cannot be null.");
+    if (!sharedWithPersons.remove(person)) {
+      throw new NoSuchElementException("The activity is not shared with " + person + ".");
+    }
+  }
+
+  /**
+   * Stops sharing the activity with a group.
+   *
+   * @param group the group to stop sharing with
+   * @throws NullPointerException if {@code group} is {@code null}
+   * @throws NoSuchElementException if the activity is not shared with the group
+   */
+  public void unshareWith(Group group) {
+    Objects.requireNonNull(group, "Group cannot be null.");
+    if (!sharedWithGroups.remove(group)) {
+      throw new NoSuchElementException(
+          "The activity is not shared with group " + group.getName() + ".");
+    }
   }
 
   /**
@@ -242,5 +322,15 @@ public class Activity {
       throw new IllegalArgumentException(message);
     }
     return text.trim();
+  }
+
+  private static double requireValidDistance(double distanceKm) {
+    if (!Double.isFinite(distanceKm)) {
+      throw new IllegalArgumentException("Distance must be a finite number.");
+    }
+    if (distanceKm < 0) {
+      throw new IllegalArgumentException("Distance cannot be negative.");
+    }
+    return distanceKm;
   }
 }

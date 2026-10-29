@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.ntnu.bidata.model.Activity;
+import edu.ntnu.bidata.model.ActivityType;
 import edu.ntnu.bidata.model.Group;
 import edu.ntnu.bidata.model.Person;
 import java.time.LocalDate;
@@ -32,6 +33,9 @@ import org.junit.jupiter.api.Test;
  *   <li>{@code findByKeyword} matches title and description, ignoring case and surrounding
  *       spaces.</li>
  *   <li>{@code findSharedWith} includes direct and group sharing, not own activities.</li>
+ *   <li>{@code findByType} returns only activities of that type, or an empty list.</li>
+ *   <li>{@code countShared} and {@code countPrivate} count shared and private activities,
+ *       and are zero for an empty register.</li>
  *   <li>{@code countPerLogger} counts per logger, ordered by name, and is empty for an empty
  *       register.</li>
  * </ul>
@@ -48,6 +52,7 @@ import org.junit.jupiter.api.Test;
  *       {@link IllegalArgumentException} when from is after to.</li>
  *   <li>{@code findByKeyword} throws {@link NullPointerException} for {@code null} and
  *       {@link IllegalArgumentException} for a blank keyword.</li>
+ *   <li>{@code findByType} throws {@link NullPointerException} for {@code null}.</li>
  * </ul>
  */
 class ActivityRegisterTest {
@@ -66,11 +71,11 @@ class ActivityRegisterTest {
     kari = new Person("Kari");
     ola = new Person("Ola");
     early = new Activity(kari, "Morning hike", "Up the hill before breakfast.",
-        LocalDateTime.of(2026, 5, 1, 7, 0));
+        LocalDateTime.of(2026, 5, 1, 7, 0), ActivityType.MOUNTAIN_HIKE, 5.0);
     middle = new Activity(ola, "Ridge walk", "A windy RIDGE.",
-        LocalDateTime.of(2026, 5, 1, 18, 0));
+        LocalDateTime.of(2026, 5, 1, 18, 0), ActivityType.MOUNTAIN_HIKE, 5.0);
     late = new Activity(kari, "Bike ride", "Along the fjord.",
-        LocalDateTime.of(2026, 6, 10, 12, 0));
+        LocalDateTime.of(2026, 6, 10, 12, 0), ActivityType.MOUNTAIN_HIKE, 5.0);
   }
 
   /** A new register is empty. */
@@ -355,7 +360,7 @@ class ActivityRegisterTest {
     early.shareWith(ingrid);
     late.shareWith(group);
     Activity own = new Activity(ingrid, "Own trip", "My own.",
-        LocalDateTime.of(2026, 4, 1, 10, 0));
+        LocalDateTime.of(2026, 4, 1, 10, 0), ActivityType.MOUNTAIN_HIKE, 5.0);
     register.addActivity(early);
     register.addActivity(middle);
     register.addActivity(late);
@@ -375,6 +380,69 @@ class ActivityRegisterTest {
     assertThrows(NullPointerException.class, () -> register.findSharedWith(null));
   }
 
+  /** {@code findByType} returns only the activities of that type. */
+  @Test
+  void findByTypeReturnsActivitiesOfType() {
+    // Arrange
+    late.setType(ActivityType.BIKE_RIDE);
+    register.addActivity(early);
+    register.addActivity(middle);
+    register.addActivity(late);
+
+    // Act
+    List<Activity> found = register.findByType(ActivityType.BIKE_RIDE);
+
+    // Assert
+    assertEquals(List.of(late), found);
+  }
+
+  /** {@code findByType} returns an empty list when no activity has the type. */
+  @Test
+  void findByTypeReturnsEmptyListWhenNoMatch() {
+    // Arrange
+    register.addActivity(early);
+
+    // Act
+    List<Activity> found = register.findByType(ActivityType.SKI_TRIP);
+
+    // Assert
+    assertTrue(found.isEmpty());
+  }
+
+  /** {@code findByType} throws NullPointerException when the type is null. */
+  @Test
+  void findByTypeThrowsWhenTypeIsNull() {
+    // Act & Assert
+    assertThrows(NullPointerException.class, () -> register.findByType(null));
+  }
+
+  /** {@code countShared} and {@code countPrivate} count shared and private activities. */
+  @Test
+  void countSharedAndCountPrivateCountActivities() {
+    // Arrange
+    early.shareWith(ola);
+    late.shareWith(new Group("Hikers"));
+    register.addActivity(early);
+    register.addActivity(middle);
+    register.addActivity(late);
+
+    // Act
+    long shared = register.countShared();
+    long privateCount = register.countPrivate();
+
+    // Assert
+    assertEquals(2, shared);
+    assertEquals(1, privateCount);
+  }
+
+  /** {@code countShared} and {@code countPrivate} are zero for an empty register. */
+  @Test
+  void countSharedAndCountPrivateAreZeroForEmptyRegister() {
+    // Act & Assert
+    assertEquals(0, register.countShared());
+    assertEquals(0, register.countPrivate());
+  }
+
   /** {@code countPerLogger} counts activities per logger, ordered by name ignoring case. */
   @Test
   void countPerLoggerCountsAndOrdersByName() {
@@ -384,7 +452,7 @@ class ActivityRegisterTest {
     register.addActivity(middle);
     register.addActivity(early);
     register.addActivity(new Activity(anna, "Walk", "Short walk.",
-        LocalDateTime.of(2026, 3, 3, 3, 3)));
+        LocalDateTime.of(2026, 3, 3, 3, 3), ActivityType.MOUNTAIN_HIKE, 5.0));
 
     // Act
     Map<Person, Long> counts = register.countPerLogger();

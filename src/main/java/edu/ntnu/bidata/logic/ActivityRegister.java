@@ -1,6 +1,7 @@
 package edu.ntnu.bidata.logic;
 
 import edu.ntnu.bidata.model.Activity;
+import edu.ntnu.bidata.model.ActivityType;
 import edu.ntnu.bidata.model.Person;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -148,6 +149,36 @@ public class ActivityRegister {
   public List<Activity> findSharedWith(Person person) {
     Objects.requireNonNull(person, "Person cannot be null.");
     return find(activity -> activity.isSharedWith(person));
+  }
+
+  /**
+   * Finds all activities of a given type.
+   *
+   * @param type the activity type to search for
+   * @return an unmodifiable sorted list of the activities of that type
+   * @throws NullPointerException if {@code type} is {@code null}
+   */
+  public List<Activity> findByType(ActivityType type) {
+    Objects.requireNonNull(type, "Activity type cannot be null.");
+    return find(activity -> activity.getType() == type);
+  }
+
+  /**
+   * Counts the activities that are shared with at least one person or group.
+   *
+   * @return the number of shared activities
+   */
+  public long countShared() {
+    return activities.stream().filter(Activity::isShared).count();
+  }
+
+  /**
+   * Counts the activities that are private, i.e. not shared with anyone.
+   *
+   * @return the number of private activities
+   */
+  public long countPrivate() {
+    return activities.stream().filter(activity -> !activity.isShared()).count();
   }
 
   /**

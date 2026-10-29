@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,12 +17,14 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Planned positive tests:
  * <ul>
- *   <li>The constructor stores logger, title, description and registration time, trims the
- *       texts, and creates a private activity.</li>
- *   <li>A registration time equal to now is accepted.</li>
- *   <li>{@code setTitle} and {@code setDescription} change and trim the value.</li>
+ *   <li>The constructor stores logger, title, description, registration time, type and
+ *       distance, trims the texts, and creates a private activity.</li>
+ *   <li>A registration time equal to now and a distance of zero are accepted.</li>
+ *   <li>{@code setTitle} and {@code setDescription} change and trim the value;
+ *       {@code setType} and {@code setDistanceKm} change the value.</li>
  *   <li>Sharing with a person or a group makes the activity shared; sharing twice has no
  *       effect.</li>
+ *   <li>{@code unshareWith} removes a single person or group.</li>
  *   <li>{@code makePrivate} removes all sharing.</li>
  *   <li>{@code isSharedWith} is true for directly shared persons and current group members,
  *       false after leaving the group, and never true for the logger.</li>
@@ -33,11 +36,14 @@ import org.junit.jupiter.api.Test;
  * <ul>
  *   <li>The constructor throws {@link NullPointerException} for each {@code null} argument.</li>
  *   <li>The constructor throws {@link IllegalArgumentException} for a blank title or
- *       description, and for a registration time in the future.</li>
+ *       description, a registration time in the future, and a negative, NaN or infinite
+ *       distance.</li>
  *   <li>The setters throw {@link NullPointerException} for {@code null} and
- *       {@link IllegalArgumentException} for a blank value.</li>
+ *       {@link IllegalArgumentException} for a blank text or an invalid distance.</li>
  *   <li>{@code shareWith} throws {@link NullPointerException} for {@code null} and
  *       {@link IllegalArgumentException} when sharing with the logger.</li>
+ *   <li>{@code unshareWith} throws {@link NullPointerException} for {@code null} and
+ *       {@link NoSuchElementException} for a person or group not shared with.</li>
  *   <li>{@code isSharedWith} and {@code isVisibleTo} throw {@link NullPointerException} for
  *       {@code null}.</li>
  * </ul>
@@ -45,6 +51,8 @@ import org.junit.jupiter.api.Test;
 class ActivityTest {
 
   private static final LocalDateTime REGISTERED_AT = LocalDateTime.of(2026, 8, 15, 9, 30);
+  private static final ActivityType TYPE = ActivityType.MOUNTAIN_HIKE;
+  private static final double DISTANCE = 7.6;
 
   private Person kari;
   private Person ola;
@@ -55,7 +63,7 @@ class ActivityTest {
   void setUp() {
     kari = new Person("Kari");
     ola = new Person("Ola");
-    activity = new Activity(kari, "Hike", "A nice hike.", REGISTERED_AT);
+    activity = new Activity(kari, "Hike", "A nice hike.", REGISTERED_AT, TYPE, DISTANCE);
   }
 
   /** The constructor stores all values, which the getters return. */
@@ -65,20 +73,24 @@ class ActivityTest {
     LocalDateTime time = LocalDateTime.of(2026, 1, 2, 3, 4);
 
     // Act
-    Activity created = new Activity(ola, "Bike ride", "Along the fjord.", time);
+    Activity created = new Activity(ola, "Bike ride", "Along the fjord.", time,
+        ActivityType.BIKE_RIDE, 42.5);
 
     // Assert
     assertSame(ola, created.getLogger());
     assertEquals("Bike ride", created.getTitle());
     assertEquals("Along the fjord.", created.getDescription());
     assertEquals(time, created.getRegisteredAt());
+    assertEquals(ActivityType.BIKE_RIDE, created.getType());
+    assertEquals(42.5, created.getDistanceKm());
   }
 
   /** The constructor stores the text values trimmed. */
   @Test
   void constructorTrimsTextValues() {
     // Act
-    Activity created = new Activity(ola, " Bike ride  ", "  Along the fjord. ", REGISTERED_AT);
+    Activity created = new Activity(ola, " Bike ride  ", "  Along the fjord. ", REGISTERED_AT,
+        TYPE, DISTANCE);
 
     // Assert
     assertEquals("Bike ride", created.getTitle());
@@ -89,7 +101,7 @@ class ActivityTest {
   @Test
   void constructorCreatesPrivateActivity() {
     // Act
-    Activity created = new Activity(ola, "Walk", "Short walk.", REGISTERED_AT);
+    Activity created = new Activity(ola, "Walk", "Short walk.", REGISTERED_AT, TYPE, DISTANCE);
 
     // Assert
     assertFalse(created.isShared());
@@ -104,10 +116,20 @@ class ActivityTest {
     LocalDateTime now = LocalDateTime.now();
 
     // Act
-    Activity created = new Activity(ola, "Walk", "Short walk.", now);
+    Activity created = new Activity(ola, "Walk", "Short walk.", now, TYPE, DISTANCE);
 
     // Assert
     assertEquals(now, created.getRegisteredAt());
+  }
+
+  /** A distance of zero is accepted. */
+  @Test
+  void constructorAcceptsZeroDistance() {
+    // Act
+    Activity created = new Activity(ola, "Walk", "Short walk.", REGISTERED_AT, TYPE, 0);
+
+    // Assert
+    assertEquals(0, created.getDistanceKm());
   }
 
   /** The constructor throws NullPointerException when the logger is null. */
@@ -115,7 +137,7 @@ class ActivityTest {
   void constructorThrowsWhenLoggerIsNull() {
     // Act & Assert
     assertThrows(NullPointerException.class,
-        () -> new Activity(null, "Hike", "A nice hike.", REGISTERED_AT));
+        () -> new Activity(null, "Hike", "A nice hike.", REGISTERED_AT, TYPE, DISTANCE));
   }
 
   /** The constructor throws NullPointerException when the title is null. */
@@ -123,7 +145,7 @@ class ActivityTest {
   void constructorThrowsWhenTitleIsNull() {
     // Act & Assert
     assertThrows(NullPointerException.class,
-        () -> new Activity(kari, null, "A nice hike.", REGISTERED_AT));
+        () -> new Activity(kari, null, "A nice hike.", REGISTERED_AT, TYPE, DISTANCE));
   }
 
   /** The constructor throws NullPointerException when the description is null. */
@@ -131,7 +153,7 @@ class ActivityTest {
   void constructorThrowsWhenDescriptionIsNull() {
     // Act & Assert
     assertThrows(NullPointerException.class,
-        () -> new Activity(kari, "Hike", null, REGISTERED_AT));
+        () -> new Activity(kari, "Hike", null, REGISTERED_AT, TYPE, DISTANCE));
   }
 
   /** The constructor throws NullPointerException when the registration time is null. */
@@ -139,7 +161,15 @@ class ActivityTest {
   void constructorThrowsWhenRegisteredAtIsNull() {
     // Act & Assert
     assertThrows(NullPointerException.class,
-        () -> new Activity(kari, "Hike", "A nice hike.", null));
+        () -> new Activity(kari, "Hike", "A nice hike.", null, TYPE, DISTANCE));
+  }
+
+  /** The constructor throws NullPointerException when the type is null. */
+  @Test
+  void constructorThrowsWhenTypeIsNull() {
+    // Act & Assert
+    assertThrows(NullPointerException.class,
+        () -> new Activity(kari, "Hike", "A nice hike.", REGISTERED_AT, null, DISTANCE));
   }
 
   /** The constructor throws IllegalArgumentException when the title is blank. */
@@ -147,7 +177,7 @@ class ActivityTest {
   void constructorThrowsWhenTitleIsBlank() {
     // Act & Assert
     assertThrows(IllegalArgumentException.class,
-        () -> new Activity(kari, "", "A nice hike.", REGISTERED_AT));
+        () -> new Activity(kari, "", "A nice hike.", REGISTERED_AT, TYPE, DISTANCE));
   }
 
   /** The constructor throws IllegalArgumentException when the description is blank. */
@@ -155,7 +185,7 @@ class ActivityTest {
   void constructorThrowsWhenDescriptionIsBlank() {
     // Act & Assert
     assertThrows(IllegalArgumentException.class,
-        () -> new Activity(kari, "Hike", " ", REGISTERED_AT));
+        () -> new Activity(kari, "Hike", " ", REGISTERED_AT, TYPE, DISTANCE));
   }
 
   /** The constructor throws IllegalArgumentException when the time is in the future. */
@@ -166,7 +196,31 @@ class ActivityTest {
 
     // Act & Assert
     assertThrows(IllegalArgumentException.class,
-        () -> new Activity(kari, "Hike", "A nice hike.", future));
+        () -> new Activity(kari, "Hike", "A nice hike.", future, TYPE, DISTANCE));
+  }
+
+  /** The constructor throws IllegalArgumentException when the distance is negative. */
+  @Test
+  void constructorThrowsWhenDistanceIsNegative() {
+    // Act & Assert
+    assertThrows(IllegalArgumentException.class,
+        () -> new Activity(kari, "Hike", "A nice hike.", REGISTERED_AT, TYPE, -0.1));
+  }
+
+  /** The constructor throws IllegalArgumentException when the distance is NaN. */
+  @Test
+  void constructorThrowsWhenDistanceIsNaN() {
+    // Act & Assert
+    assertThrows(IllegalArgumentException.class,
+        () -> new Activity(kari, "Hike", "A nice hike.", REGISTERED_AT, TYPE, Double.NaN));
+  }
+
+  /** The constructor throws IllegalArgumentException when the distance is infinite. */
+  @Test
+  void constructorThrowsWhenDistanceIsInfinite() {
+    // Act & Assert
+    assertThrows(IllegalArgumentException.class, () -> new Activity(kari, "Hike",
+        "A nice hike.", REGISTERED_AT, TYPE, Double.POSITIVE_INFINITY));
   }
 
   /** {@code setTitle} changes the title and stores it trimmed. */
@@ -215,6 +269,55 @@ class ActivityTest {
   void setDescriptionThrowsWhenDescriptionIsBlank() {
     // Act & Assert
     assertThrows(IllegalArgumentException.class, () -> activity.setDescription(""));
+  }
+
+  /** {@code setType} changes the type. */
+  @Test
+  void setTypeChangesType() {
+    // Act
+    activity.setType(ActivityType.SKI_TRIP);
+
+    // Assert
+    assertEquals(ActivityType.SKI_TRIP, activity.getType());
+  }
+
+  /** {@code setType} throws NullPointerException when the type is null. */
+  @Test
+  void setTypeThrowsWhenTypeIsNull() {
+    // Act & Assert
+    assertThrows(NullPointerException.class, () -> activity.setType(null));
+  }
+
+  /** {@code setDistanceKm} changes the distance. */
+  @Test
+  void setDistanceKmChangesDistance() {
+    // Act
+    activity.setDistanceKm(12.3);
+
+    // Assert
+    assertEquals(12.3, activity.getDistanceKm());
+  }
+
+  /** {@code setDistanceKm} throws IllegalArgumentException when the distance is negative. */
+  @Test
+  void setDistanceKmThrowsWhenDistanceIsNegative() {
+    // Act & Assert
+    assertThrows(IllegalArgumentException.class, () -> activity.setDistanceKm(-1));
+  }
+
+  /** {@code setDistanceKm} throws IllegalArgumentException when the distance is NaN. */
+  @Test
+  void setDistanceKmThrowsWhenDistanceIsNaN() {
+    // Act & Assert
+    assertThrows(IllegalArgumentException.class, () -> activity.setDistanceKm(Double.NaN));
+  }
+
+  /** {@code setDistanceKm} throws IllegalArgumentException when the distance is infinite. */
+  @Test
+  void setDistanceKmThrowsWhenDistanceIsInfinite() {
+    // Act & Assert
+    assertThrows(IllegalArgumentException.class,
+        () -> activity.setDistanceKm(Double.NEGATIVE_INFINITY));
   }
 
   /** Sharing with a person makes the activity shared with that person. */
@@ -291,6 +394,65 @@ class ActivityTest {
   void shareWithGroupThrowsWhenGroupIsNull() {
     // Act & Assert
     assertThrows(NullPointerException.class, () -> activity.shareWith((Group) null));
+  }
+
+  /** {@code unshareWith} removes the person and keeps other sharing. */
+  @Test
+  void unshareWithPersonRemovesPerson() {
+    // Arrange
+    Person ingrid = new Person("Ingrid");
+    activity.shareWith(ola);
+    activity.shareWith(ingrid);
+
+    // Act
+    activity.unshareWith(ola);
+
+    // Assert
+    assertFalse(activity.isSharedWith(ola));
+    assertEquals(List.of(ingrid), activity.getSharedWithPersons());
+  }
+
+  /** {@code unshareWith} throws NullPointerException when the person is null. */
+  @Test
+  void unshareWithPersonThrowsWhenPersonIsNull() {
+    // Act & Assert
+    assertThrows(NullPointerException.class, () -> activity.unshareWith((Person) null));
+  }
+
+  /** {@code unshareWith} throws NoSuchElementException when not shared with the person. */
+  @Test
+  void unshareWithPersonThrowsWhenNotShared() {
+    // Act & Assert
+    assertThrows(NoSuchElementException.class, () -> activity.unshareWith(ola));
+  }
+
+  /** {@code unshareWith} removes the group, making the activity private again. */
+  @Test
+  void unshareWithGroupRemovesGroup() {
+    // Arrange
+    Group group = new Group("Hikers");
+    activity.shareWith(group);
+
+    // Act
+    activity.unshareWith(group);
+
+    // Assert
+    assertFalse(activity.isShared());
+  }
+
+  /** {@code unshareWith} throws NullPointerException when the group is null. */
+  @Test
+  void unshareWithGroupThrowsWhenGroupIsNull() {
+    // Act & Assert
+    assertThrows(NullPointerException.class, () -> activity.unshareWith((Group) null));
+  }
+
+  /** {@code unshareWith} throws NoSuchElementException when not shared with the group. */
+  @Test
+  void unshareWithGroupThrowsWhenNotShared() {
+    // Act & Assert
+    assertThrows(NoSuchElementException.class,
+        () -> activity.unshareWith(new Group("Hikers")));
   }
 
   /** {@code makePrivate} removes all persons and groups the activity is shared with. */
